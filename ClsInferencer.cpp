@@ -191,10 +191,10 @@ void Inferencer::set_scale_factor(float factor) {
 }
 
 void Inferencer::set_norm_mean(cv::Scalar mean) {
-    transform_.norm_mean_ = mean;
+    transform_.norm_mean_ = std::move(mean);
 }
 
-void Inferencer::set_norm_std(cv::Scalar std) { transform_.norm_std_ = std; }
+void Inferencer::set_norm_std(cv::Scalar std) { transform_.norm_std_ = std::move(std); }
 
 size_t Inferencer::get_output_size() const {
     return get_size_by_dim(output_dims_[0]) * batch_size_;

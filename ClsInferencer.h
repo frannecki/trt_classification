@@ -42,6 +42,8 @@ typedef struct {
 class Inferencer {
 public:
     Inferencer(const std::string& model_path, int max_batch_size);
+    Inferencer(const Inferencer&) = delete;
+    Inferencer& operator=(const Inferencer&) = delete;
     virtual ~Inferencer();
     virtual void Inference(const std::vector<cv::Mat>& images,
                            std::vector<std::vector<float>>& probs) = 0;
