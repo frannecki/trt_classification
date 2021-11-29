@@ -30,7 +30,8 @@ static size_t get_size_by_dim(const nvinfer1::Dims& dims) {
  */
 static void preprocess_image(const cv::Mat& image, float* gpu_input,
                              const nvinfer1::Dims& dims,
-                             const Transform& transform) {
+                             const Transform& transform,
+                             cudaStream_t& stream) {
   // read input image
   size_t nbdims = dims.nbDims;
   auto input_width = dims.d[nbdims - 1];
@@ -57,8 +58,8 @@ static void preprocess_image(const cv::Mat& image, float* gpu_input,
         input_size, CV_32FC1, cpu_input + i * input_width * input_height));
   }
   cv::split(flt_image, image_channels);
-  cudaMemcpy(gpu_input, cpu_input, image_size * sizeof(float),
-             cudaMemcpyKind::cudaMemcpyHostToDevice);
+  cudaMemcpyAsync(gpu_input, cpu_input, image_size * sizeof(float),
+                  cudaMemcpyHostToDevice, stream);
   free(cpu_input);
   cpu_input = nullptr;
 }
@@ -73,11 +74,12 @@ static void preprocess_image(const cv::Mat& image, float* gpu_input,
  */
 static std::vector<float> postprocess_results(float* gpu_output,
                                               const nvinfer1::Dims& dims,
-                                              int batch_size) {
+                                              int batch_size,
+                                              cudaStream_t& stream) {
   // copy results from GPU to CPU
   std::vector<float> cpu_output(get_size_by_dim(dims));
-  cudaMemcpy(cpu_output.data(), gpu_output, cpu_output.size() * sizeof(float),
-             cudaMemcpyDeviceToHost);
+  cudaMemcpyAsync(cpu_output.data(), gpu_output, cpu_output.size() * sizeof(float),
+                  cudaMemcpyDeviceToHost, stream);
   return cpu_output;
 }
 
@@ -162,7 +164,7 @@ static void parse_trt_engine(const std::string& model_path,
   };
   // generate TensorRT engine optimized for the target platform
   engine.reset(runtime->deserializeCudaEngine(plan.data(), plan.size()));
-  std::cout << engine->getMaxBatchSize() << std::endl;
+  std::cout << "maxBatchsize = " << engine->getMaxBatchSize() << std::endl;
   context.reset(engine->createExecutionContext());
 }
 
@@ -180,7 +182,6 @@ Inferencer::Inferencer(const std::string& model_path, int max_batch_size) {
   context_ = TrtUniquePtr<nvinfer1::IExecutionContext>{nullptr};
   std::cout << "Parsing onnx model: " << model_path << std::endl;
   parse_onnx_model(model_path, engine_, context_, max_batch_size);
-  parse_trt_engine(model_path, engine_, context_);
   std::cout << "Parsed onnx model: " << model_path << std::endl;
   Init();
 }
@@ -248,20 +249,22 @@ size_t Inferencer::get_output_size() const {
 }
 
 std::vector<float> Inferencer::Predict(const std::vector<cv::Mat>& images) {
+  cudaStream_t stream;
+  cudaStreamCreate(&stream);
   // preprocess input data
   for (size_t i = 0; i < images.size(); ++i) {
     preprocess_image(
         images[i],
         reinterpret_cast<float*>((char*)buffers_[0] +
                                  binding_sizes_[0] / batch_size_ * i),
-        input_dims_[0], transform_);
+        input_dims_[0], transform_, stream);
   }
   // inference
-  // context_->enqueue(images.size(), buffers_.data(), 0, nullptr);
-  context_->execute(images.size(), buffers_.data());
+  context_->enqueue(images.size(), buffers_.data(), stream, nullptr);
   // postprocess results
   return postprocess_results((float*)buffers_[1], output_dims_[0],
-                             images.size());
+                             images.size(), stream);
+  cudaStreamSynchronize(stream);
 }
 
 void Inferencer::DoInference(std::vector<cv::Mat>& images,
