@@ -191,6 +191,7 @@ Inferencer::~Inferencer() {
 }
 
 void Inferencer::Init() {
+  // init configs
   transform_ = Transform{1.f / 255.f, cv::Scalar(0.485f, 0.456f, 0.406f),
                          cv::Scalar(0.229f, 0.224f, 0.225f)};
 
@@ -248,7 +249,8 @@ size_t Inferencer::get_output_size() const {
   return get_size_by_dim(output_dims_[0]) * batch_size_;
 }
 
-std::vector<float> Inferencer::Predict(const std::vector<cv::Mat>& images) {
+void Inferencer::DoInference(std::vector<cv::Mat>& images,
+                             std::vector<std::vector<float>>& probs) {
   cudaStream_t stream;
   cudaStreamCreate(&stream);
   // preprocess input data
@@ -262,14 +264,11 @@ std::vector<float> Inferencer::Predict(const std::vector<cv::Mat>& images) {
   // inference
   context_->enqueue(images.size(), buffers_.data(), stream, nullptr);
   // postprocess results
-  return postprocess_results((float*)buffers_[1], output_dims_[0],
+  std::vector<float> logits = postprocess_results(
+      (float*)buffers_[1], output_dims_[0],
                              images.size(), stream);
   cudaStreamSynchronize(stream);
-}
 
-void Inferencer::DoInference(std::vector<cv::Mat>& images,
-                             std::vector<std::vector<float>>& probs) {
-  std::vector<float> logits = this->Predict(images);
   ProcessOutput(images, probs, logits);
 }
 
@@ -309,7 +308,6 @@ void SegInferencer::ProcessOutput(
   std::vector<cv::Mat> masks;
 
   for (size_t i = 0; i < images.size(); ++i) {
-    // calculate softmax
     std::vector<float> results(logits.begin() + i * out_dim_,
                                logits.begin() + (i + 1) * out_dim_);
     cv::Mat mask = cv::Mat(output_dim_.d[output_dim_.nbDims - 2],

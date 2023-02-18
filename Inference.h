@@ -1,19 +1,22 @@
 #ifndef INFERENCE_H
 #define INFERENCE_H
 
-#include <NvInfer.h>
-#include <NvOnnxParser.h>
+#define TRT_RESNET_API __declspec(dllexport)
+
 #include <assert.h>
-#include <cuda_runtime_api.h>
 
 #include <algorithm>
 #include <iostream>
 #include <memory>
 #include <numeric>
+
+#include <cuda_runtime_api.h>
+#include <NvInfer.h>
+#include <NvOnnxParser.h>
+
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/opencv.hpp>
-#include <vector>
 
 struct TrtDestructor {
   template <class T>
@@ -23,6 +26,7 @@ struct TrtDestructor {
 };
 
 template <class T>
+// wrap with std::unique_ptr to call `destroy()` while destructing
 using TrtUniquePtr = std::unique_ptr<T, TrtDestructor>;
 
 typedef struct {
@@ -34,7 +38,7 @@ typedef struct {
 /**
  * @brief   predictor class for patches
  */
-class Inferencer {
+class TRT_RESNET_API Inferencer {
  public:
   Inferencer(const std::string& engine_path);
   Inferencer(const std::string& model_path, int max_batch_size);
@@ -50,7 +54,6 @@ class Inferencer {
   size_t get_output_size() const;
 
  protected:
-  std::vector<float> Predict(const std::vector<cv::Mat>& images);
   virtual void ProcessOutput(std::vector<cv::Mat>& images,
                              std::vector<std::vector<float>>& probs,
                              std::vector<float>& logits) = 0;
