@@ -73,7 +73,7 @@ private:
   void Init();
 };
 
-class ClsInferencer : public Inferencer {
+class TRT_RESNET_API ClsInferencer : public Inferencer {
  public:
   ClsInferencer(const std::string& model_path, int max_batch_size);
   ClsInferencer(const std::string& engine_path);
@@ -88,7 +88,7 @@ class ClsInferencer : public Inferencer {
  * @brief   segmentor class for thumbnails
  */
 
-class SegInferencer : public Inferencer {
+class TRT_RESNET_API SegInferencer : public Inferencer {
  public:
   SegInferencer(const std::string& engine_path);
 
